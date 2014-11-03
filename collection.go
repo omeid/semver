@@ -1,31 +1,57 @@
 package semver
 
-import "github.com/hashicorp/go-version"
+import "sort"
+
+var (
+	ErrorVersionNotFound = Error{"Version %s not found.", ""}
+)
 
 // Collection is a type that implements the sort.Interface interface
 // so that versions can be sorted.
 type Collection []*Version
 
-func NewCollection(raws []string) {
+func NewCollection(raws []string) (Collection, error) {
 
-	versions := make([]*Version, len(raws))
+	versions := make(Collection, len(raws))
 
 	for i, raw := range raws {
-		v, _ := version.NewVersion(raw)
+		v, err := NewVersion(raw)
+		if err != nil {
+			return versions, err
+		}
 		versions[i] = v
 	}
 
-	return versions
+	return versions, nil
 }
 
 func (vc Collection) Len() int {
 	return len(vc)
 }
 
+//TODO: Check why sort.Reverse isn't working.
 func (vc Collection) Less(i, j int) bool {
-	return true // vc[i].LessThan(vc[j])
+	return vc[j].LessThan(vc[i])
 }
 
 func (vc Collection) Swap(i, j int) {
 	vc[i], vc[j] = vc[j], vc[i]
+}
+
+func (vc Collection) Latest(ranges string) (*Version, error) {
+
+	//This puts the highest versions on top.
+	sort.Sort(vc)
+	c, err := NewRange(ranges)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range vc {
+		if c.Check(v) {
+			return v, nil
+		}
+	}
+
+	return nil, ErrorVersionNotFound.Fault(ranges)
 }

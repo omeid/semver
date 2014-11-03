@@ -3,112 +3,89 @@ package semver
 import (
 	"fmt"
 	"regexp"
-	"strconv"
 )
 
 var (
 	ErrorMalformedVersion = Error{"Malformed Version: %s", ""}
-)
 
-var (
-	PreRegexp     *regexp.Regexp = regexp.MustCompile(`^([a-zA-Z1-9][0-9A-Za-z-]+)?(?:.([0-9]+))?`)
-	productRegexp *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9-]+[a-zA-Z]$`)
-
-	versionRegexp *regexp.Regexp = regexp.MustCompile(`^(?:([a-zA-Z0-9-]+[a-zA-Z])-)?` +
+	versionRegexpRaw = `(?:([a-zA-Z0-9]+[a-zA-Z0-9-]*[a-zA-Z0-9]+)-)?` +
 		`([0-9]+(?:\.[0-9]+){0,2})` +
-		`(?:-([0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*))?` +
-		`(?:\+([0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*))?$`)
+		`(?:\-(` + preRegexpRaw + `))?` + //The extra capture group is to pass the whole release.tag to NewPre.
+		`(?:\+([0-9A-Za-z.]+))?`
+	versionRegexp = regexp.MustCompile(`^` + versionRegexpRaw + `$`)
 )
-
-type Pre struct {
-	Ident string
-	Patch int
-}
-
-func NewPre(raw string) *Pre {
-
-	parts := PreRegexp.FindStringSubmatch(raw)
-
-	i := parts[1]
-	p, err := strconv.Atoi(parts[2])
-
-	pre := Pre{i, p}
-
-	if pre.Ident == "" || err != nil {
-		return nil
-	}
-	return &pre
-}
-
-var stages = map[string]int{
-	"pre":   0,
-	"alpha": 1,
-	"beta":  2,
-	"rc":    3,
-}
-
-// Compares Pre v to o:
-// -1 == v is less than o
-// 0 == v is equal to o
-// 1 == v is greater than o
-
-func (v *Pre) Compare(o *Pre) int {
-	if stages[v.Ident] > stages[o.Ident] {
-		return 1
-	}
-
-	if stages[v.Ident] < stages[o.Ident] {
-		return -1
-	}
-
-	if v.Patch > o.Patch {
-		return 1
-	}
-
-	if v.Patch < o.Patch {
-		return -1
-	}
-
-	return 0
-}
 
 type Version struct {
 	Raw string
 
 	Product string
-	Major   uint16
-	Minor   uint16
-	Patch   uint16
-	Pre     *Pre
-	Meta    string
+
+	Major uint16
+	Minor uint16
+	Patch uint16
+	Pre   *Pre
+	Meta  string
+}
+
+func Parts(raw string) ([]string, error) {
+	parts := versionRegexp.FindStringSubmatch(raw)
+	if parts == nil {
+		return nil, ErrorMalformedVersion.Fault(raw)
+	}
+	return parts, nil
 }
 
 func NewVersion(raw string) (*Version, error) {
 
-	parts := versionRegexp.FindStringSubmatch(raw)
-	if parts == nil {
-		return nil, ErrorMalformedVersion.Fault(raw)
+	parts, err := Parts(raw)
+	if err != nil {
+		return nil, err
 	}
 
 	ver := new(Version)
 
 	ver.Raw = parts[0]
-
 	ver.Product = parts[1]
 
 	fmt.Sscanf(parts[2], "%d.%d.%d", &ver.Major, &ver.Minor, &ver.Patch)
 
-	ver.Pre = NewPre(parts[3])
+	pre, err := NewPre(parts[3])
+	if err != nil {
+		return nil, err
+	}
 
-	ver.Meta = parts[4]
-
+	if parts[3] != "" {
+		ver.Pre = pre
+	}
+	ver.Meta = parts[6]
 	return ver, nil
 }
 
+func (v *Version) String() string {
+
+	ver := fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+	pre := v.Pre.String()
+	if pre != "" {
+		ver = ver + "-" + pre
+	}
+
+	return ver
+}
+
+func (v *Version) StringWithMeta() string {
+	ver := v.String()
+
+	if v.Meta != "" {
+		ver = ver + "+" + v.Meta
+	}
+	return ver
+
+}
+
 // Compares Versions v to o:
-// -1 == v is less than o
-// 0 == v is equal to o
-// 1 == v is greater than o
+// -1 == v is older than o
+// 0 == v is same as o
+// 1 == v is newer than o
 
 func (v *Version) Compare(o *Version) int {
 
@@ -117,6 +94,7 @@ func (v *Version) Compare(o *Version) int {
 	if v.Major > o.Major {
 		return 1
 	}
+
 	if v.Major < o.Major {
 		return -1
 	}
@@ -137,5 +115,33 @@ func (v *Version) Compare(o *Version) int {
 		return -1
 	}
 
+	if v.Pre == nil {
+		return 1
+	}
+
+	if o.Pre == nil {
+		return -1
+	}
+
+	//Both has prereleases, compare them.
 	return v.Pre.Compare(o.Pre)
+}
+
+func (v *Version) LessThan(o *Version) bool {
+	return v.Compare(o) == -1
+}
+func (v *Version) GreaterThan(o *Version) bool {
+	return v.Compare(o) == 1
+}
+func (v *Version) Equal(o *Version) bool {
+	return v.Compare(o) == 0
+}
+func (v *Version) NotEqual(o *Version) bool {
+	return v.Compare(o) != 0
+}
+func (v *Version) GreaterThanOrEqual(o *Version) bool {
+	return v.Compare(o) != -1
+}
+func (v *Version) LessThanOrEqual(o *Version) bool {
+	return v.Compare(o) != 1
 }

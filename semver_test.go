@@ -4,29 +4,34 @@ import (
 	"testing"
 )
 
+type testset []struct {
+	pass bool // This flag indicts if this set of vers pass as valid or not.
+	vers []string
+}
+
 func TestNewVersion(t *testing.T) {
-	cases := []struct {
-		version string
-		err     bool
-	}{
-		{"package-ver-1.2.3", false},
-		{"1.0", false},
-		{"1", false},
-		{"1.2.beta", true},
-		{"foo", true},
-		{"1.2-5", false},
-		{"1.2-beta.5", false},
-		{"\n1.2", true},
-		{"1.2.0-x.Y.0+metadata", false},
-		{"1.2.3.4", true},
+
+	tests := testset{
+		//This is a set of valid versions.
+		{
+			true,
+			[]string{"package-ver-1.2.3", "1.2.3", "1.2", "1", "1.2-beta.5", "1.2.0-beta", "1.2.0-alpha+metadata", "1.2.0-beta.1", "1.2.0-alpha+metadata.3"},
+		},
+		{
+			false,
+			[]string{"package-ver-1.2.3+foo-dat", "1-0", "1.2.3-unicorn", "foo", "1.2-5", "1.2.0-x.Y.0+metadata", "1.2.0-0alpha+metadata", "1.2.0-0", "1.2.0+sd+fa"},
+		},
 	}
 
-	for _, tc := range cases {
-		v, err := NewVersion(tc.version)
-		if tc.err && err == nil {
-			t.Fatalf("expected error for version: %s \n %v", tc.version, v)
-		} else if !tc.err && err != nil {
-			t.Fatalf("error for version: %s \n %v", tc.version, err)
+	for _, test := range tests {
+
+		for _, ver := range test.vers {
+			v, err := NewVersion(ver)
+
+			if (err == nil) != test.pass {
+				t.Fatalf("Test Failed.\n '%s'.\n Expected Error: %t\n ERROR: %v\n VERSION: %v\v", ver, !test.pass, err, v)
+			}
 		}
+
 	}
 }
