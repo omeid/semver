@@ -38,11 +38,11 @@ func (vc Collection) Swap(i, j int) {
 	vc[i], vc[j] = vc[j], vc[i]
 }
 
-func (vc Collection) Latest(ranges string) (*Version, error) {
+func (vc Collection) Latest(constraints string) (*Version, error) {
 
 	//This puts the highest versions on top.
 	sort.Sort(vc)
-	c, err := NewRange(ranges)
+	c, err := NewConstraint(constraints)
 	if err != nil {
 		return nil, err
 	}
@@ -53,5 +53,5 @@ func (vc Collection) Latest(ranges string) (*Version, error) {
 		}
 	}
 
-	return nil, ErrorVersionNotFound.Fault(ranges)
+	return nil, ErrorVersionNotFound.Fault(constraints)
 }
